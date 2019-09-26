@@ -29,5 +29,7 @@ NAME_DISPLAY_MAP = {
 
     "min_volume": "最小委托量",
     "max_volume": "最大委托量",
-    "volume_change": "委托量变化"
+    "volume_change": "委托量变化",
+    "total_amt": "上限金額(元)",
+    "time_line": "交易截止(時:分)"
 }

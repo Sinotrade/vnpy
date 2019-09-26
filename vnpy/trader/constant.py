@@ -122,6 +122,10 @@ class Exchange(Enum):
     KRX = "KRX"             # Korean Exchange
     OTC = "OTC"             # OTC Product (Forex/CFD/Pink Sheet Equity)
     IBKRATS = "IBKRATS"     # Paper Trading Exchange of IB
+    TSE = "TSE"             # Taiwan Stock Exchange
+    TFE = "TFE"             # Taiwan Futures Exchange
+
+    OANDA = "OANDA"         # oanda.com
 
     # CryptoCurrency
     BITMEX = "BITMEX"

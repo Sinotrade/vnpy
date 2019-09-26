@@ -1,10 +1,8 @@
-
 from vnpy.event import EventEngine, Event
 from vnpy.trader.engine import BaseEngine, MainEngine
-from vnpy.trader.event import (
-    EVENT_TICK, EVENT_TIMER, EVENT_ORDER, EVENT_TRADE)
-from vnpy.trader.constant import (Direction, Offset, OrderType)
-from vnpy.trader.object import (SubscribeRequest, OrderRequest, LogData)
+from vnpy.trader.event import EVENT_TICK, EVENT_TIMER, EVENT_ORDER, EVENT_TRADE
+from vnpy.trader.constant import Direction, Offset, OrderType
+from vnpy.trader.object import SubscribeRequest, OrderRequest, LogData
 from vnpy.trader.utility import load_json, save_json, round_to
 from vnpy.trader.setting import SETTINGS
 
@@ -19,6 +17,7 @@ from .genus import GenusClient
 
 class AlgoEngine(BaseEngine):
     """"""
+
     setting_filename = "algo_trading_setting.json"
 
     def __init__(self, main_engine: MainEngine, event_engine: EventEngine):
@@ -61,7 +60,9 @@ class AlgoEngine(BaseEngine):
         from .algos.grid_algo import GridAlgo
         from .algos.dma_algo import DmaAlgo
         from .algos.arbitrage_algo import ArbitrageAlgo
+        from .algos.moneywap_algo import MoneywapAlgo
 
+        self.add_algo_template(MoneywapAlgo)
         self.add_algo_template(TwapAlgo)
         self.add_algo_template(IcebergAlgo)
         self.add_algo_template(SniperAlgo)
@@ -122,10 +123,8 @@ class AlgoEngine(BaseEngine):
 
     def process_timer_event(self, event: Event):
         """"""
-        # Generate a list of algos first to avoid dict size change
-        algos = list(self.algos.values())
-
-        for algo in algos:
+        # for algo in self.algos.values():
+        for algo in list(self.algos.values()):
             algo.update_timer()
 
     def process_trade_event(self, event: Event):
@@ -178,16 +177,13 @@ class AlgoEngine(BaseEngine):
         """"""
         contract = self.main_engine.get_contract(vt_symbol)
         if not contract:
-            self.write_log(f'订阅行情失败，找不到合约：{vt_symbol}', algo)
+            self.write_log(f"订阅行情失败，找不到合约：{vt_symbol}", algo)
             return
 
         algos = self.symbol_algo_map.setdefault(vt_symbol, set())
 
         if not algos:
-            req = SubscribeRequest(
-                symbol=contract.symbol,
-                exchange=contract.exchange
-            )
+            req = SubscribeRequest(symbol=contract.symbol, exchange=contract.exchange)
             self.main_engine.subscribe(req, contract.gateway_name)
 
         algos.add(algo)
@@ -200,12 +196,12 @@ class AlgoEngine(BaseEngine):
         price: float,
         volume: float,
         order_type: OrderType,
-        offset: Offset
+        offset: Offset,
     ):
         """"""
         contract = self.main_engine.get_contract(vt_symbol)
         if not contract:
-            self.write_log(f'委托下单失败，找不到合约：{vt_symbol}', algo)
+            self.write_log(f"委托下单失败，找不到合约：{vt_symbol}", algo)
             return
 
         volume = round_to(volume, contract.min_volume)
@@ -268,10 +264,7 @@ class AlgoEngine(BaseEngine):
     def put_setting_event(self, setting_name: str, setting: dict):
         """"""
         event = Event(EVENT_ALGO_SETTING)
-        event.data = {
-            "setting_name": setting_name,
-            "setting": setting
-        }
+        event.data = {"setting_name": setting_name, "setting": setting}
         self.event_engine.put(event)
 
     def update_algo_setting(self, setting_name: str, setting: dict):
@@ -289,10 +282,7 @@ class AlgoEngine(BaseEngine):
         self.algo_settings.pop(setting_name)
 
         event = Event(EVENT_ALGO_SETTING)
-        event.data = {
-            "setting_name": setting_name,
-            "setting": None
-        }
+        event.data = {"setting_name": setting_name, "setting": None}
         self.event_engine.put(event)
 
         self.save_algo_setting()
@@ -300,17 +290,12 @@ class AlgoEngine(BaseEngine):
     def put_parameters_event(self, algo: AlgoTemplate, parameters: dict):
         """"""
         event = Event(EVENT_ALGO_PARAMETERS)
-        event.data = {
-            "algo_name": algo.algo_name,
-            "parameters": parameters
-        }
+        event.data = {"algo_name": algo.algo_name, "parameters": parameters}
         self.event_engine.put(event)
 
     def put_variables_event(self, algo: AlgoTemplate, variables: dict):
         """"""
         event = Event(EVENT_ALGO_VARIABLES)
-        event.data = {
-            "algo_name": algo.algo_name,
-            "variables": variables
-        }
+        event.data = {"algo_name": algo.algo_name, "variables": variables}
         self.event_engine.put(event)
+
