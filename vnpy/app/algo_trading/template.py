@@ -98,7 +98,7 @@ class AlgoTemplate:
     def stop(self):
         """"""
         self.active = False
-        self.cancel_all()
+        # self.cancel_all()
         self.on_stop()
         self.put_variables_event()
 
