@@ -2,6 +2,7 @@
 
 import os
 import sys
+from collections import OrderedDict
 from copy import copy
 from datetime import datetime
 from threading import Thread
@@ -81,6 +82,7 @@ class SinopacGateway(BaseGateway):
         self.code2contract = {}
 
         self.trades = set()
+        self.orders = OrderedDict()
 
         self.count = 0
         self.interval = 20
@@ -89,15 +91,12 @@ class SinopacGateway(BaseGateway):
         self.query_funcs = [self.query_position, self.query_trade]
         self.api = sj.Shioaji()
 
-    def activate_ca(self, ca_path, ca_password, ca_id):
-        self.api.activate_ca(
-            ca_path=ca_path, ca_passwd=ca_password, person_id=ca_id)
-
     def query_trade(self):
         self.api.update_status()
         trades = self.api.list_trades()
         for item in trades:
-            if item.status in [SinopacStatus.Filling, SinopacStatus.Filled]:  # 成交
+            self.orders[item.order.seqno] = item
+            if item.status.status in [SinopacStatus.Filling, SinopacStatus.Filled]:  # 成交
                 tradeid = item.status.order_id
                 if tradeid in self.trades:
                     continue
@@ -123,7 +122,7 @@ class SinopacGateway(BaseGateway):
                     orderid=item.order.seqno,
                     direction=Direction.LONG if item.order.action == "Buy" else Direction.SHORT,
                     price=float(item.order.price),
-                    volume=float(item.order.quantity),
+                    volume=float(item.status.remaining),
                     traded=float(item.status.deal_quantity),
                     status=STATUS_SINOPAC2VT[item.status.status],
                     time=item.status.order_datetime,
@@ -160,9 +159,9 @@ class SinopacGateway(BaseGateway):
         self.query_position()
         self.write_log("庫存部位查詢")
         if setting['憑證檔案路徑'] != "":
-            self.activate_ca(setting['憑證檔案路徑'],
-                             setting['憑證密碼'], setting['身份證字號'])
-
+            self.api.activate_ca(setting['憑證檔案路徑'],
+                                 setting['憑證密碼'], setting['身份證字號'])
+            self.write_log(f"{setting['身份證字號']} 憑證 已啟用.")
         self.api.quote.set_callback(self.quote_callback)
         self.write_log("交易行情 - 連線成功")
         self.thread.start()
@@ -209,7 +208,7 @@ class SinopacGateway(BaseGateway):
         for category in self.api.Contracts.Futures:
             for contract in category:
                 data = ContractData(
-                    symbol=contract.code,
+                    symbol=f'{contract.code} {contract.name}',
                     exchange=Exchange.TFE,
                     name=contract.name + contract.delivery_month,
                     product=Product.FUTURES,
@@ -225,7 +224,7 @@ class SinopacGateway(BaseGateway):
         for category in self.api.Contracts.Options:
             for contract in category:
                 data = ContractData(
-                    symbol=contract.code,
+                    symbol=f'{contract.code} {contract.name}',
                     exchange=Exchange.TFE,
                     name=contract.name + contract.delivery_month,
                     product=Product.OPTION,
@@ -245,7 +244,7 @@ class SinopacGateway(BaseGateway):
         for category in self.api.Contracts.Stocks:
             for contract in category:
                 data = ContractData(
-                    symbol=contract.code,
+                    symbol=f'{contract.code} {contract.name}',
                     exchange=Exchange.TSE,
                     name=contract.name,
                     product=Product.EQUITY,
@@ -296,15 +295,18 @@ class SinopacGateway(BaseGateway):
 
         trade = self.api.place_order(self.code2contract[req.symbol], order)
         self.write_log(str(trade))
-        order = req.create_order_data(order.seqno, self.gateway_name)
-        self.write_log(str(order))
-        self.on_order(order)
-        return order.vt_orderid
+        orderdata = req.create_order_data(order.seqno, self.gateway_name)
+        self.write_log(str(orderdata))
+        self.orders[orderdata.orderid] = trade
+        self.on_order(orderdata)
+        return orderdata.vt_orderid
 
     def cancel_order(self, req: CancelRequest):
         """"""
         self.write_log("***cancel_order")
         self.write_log(str(req))
+        self.write_log(str(self.orders[req.orderid]))
+        self.api.cancel_order(self.orders[req.orderid])
 
     def query_account(self):
         """"""
