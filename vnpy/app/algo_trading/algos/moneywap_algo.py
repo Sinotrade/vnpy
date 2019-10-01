@@ -56,7 +56,7 @@ class MoneywapAlgo(AlgoTemplate):
         if tick and self.direction == Direction.SHORT:
             self.price = tick.bid_price_1
 
-        self.volume = self.total_amt // self.price  # 總數量
+        self.volume = self.total_amt // 1000 // self.price  # 總數量
         self.interval = self.time // self.volume
         self.order_volume = 1
         self.timer_count = 0
@@ -96,7 +96,7 @@ class MoneywapAlgo(AlgoTemplate):
         if not tick:
             return
 
-        self.cancel_all()
+        #self.cancel_all()
 
         left_volume = self.volume - self.traded
         order_volume = min(self.order_volume, left_volume)

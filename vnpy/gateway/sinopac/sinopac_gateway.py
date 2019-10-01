@@ -208,7 +208,7 @@ class SinopacGateway(BaseGateway):
         for category in self.api.Contracts.Futures:
             for contract in category:
                 data = ContractData(
-                    symbol=f'{contract.code} {contract.name}',
+                    symbol=f'{contract.code}',
                     exchange=Exchange.TFE,
                     name=contract.name + contract.delivery_month,
                     product=Product.FUTURES,
@@ -244,7 +244,7 @@ class SinopacGateway(BaseGateway):
         for category in self.api.Contracts.Stocks:
             for contract in category:
                 data = ContractData(
-                    symbol=f'{contract.code} {contract.name}',
+                    symbol=f'{contract.code}',
                     exchange=Exchange.TSE,
                     name=contract.name,
                     product=Product.EQUITY,
