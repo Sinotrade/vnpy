@@ -2,6 +2,8 @@
 
 import os
 import sys
+import requests
+import json
 from collections import OrderedDict
 from copy import copy
 from datetime import datetime
@@ -257,6 +259,90 @@ class SinopacGateway(BaseGateway):
                 self.on_contract(data)
                 self.code2contract[contract.code] = contract
 
+    def tick_snapshot_TSE(self, contract):
+        url = "https://service.sinotrade.com.tw/api/v1/Quotes/get122101"
+        payload = {"code": contract.code}
+        r = requests.post(url, json=payload)
+        rtn = json.loads(r.text)
+        url2 = "https://service.sinotrade.com.tw/api/v1/codeList/StockInfo"
+        payload2 = {"stockidList": [contract.code]}
+        r2 = requests.post(url2, json=payload2)
+        rtn2 = json.loads(r2.text)
+
+        if rtn.get('success', None):
+            code = contract.code
+            data = rtn['result']
+            data2 = rtn2['result'][code]
+            tick = self.ticks.get(code, None)
+            if tick is None:
+                contract = self.code2contract[code]
+                tick = TickData(
+                    symbol=code,
+                    exchange=Exchange.TSE,
+                    name=f"{contract['name']}",
+                    datetime=datetime.now(),
+                    gateway_name=self.gateway_name,
+                )
+            tick.volume = data["Volume"]
+            tick.last_price = data["Close"]
+            tick.limit_up = data["UpLimit"]
+            tick.open_interest = 0
+            tick.limit_down = data["DownLimit"]
+            tick.open_price = data["Open"]
+            tick.high_price = data["High"]
+            tick.low_price = data["Low"]
+            tick.pre_close = data2["Reference"]
+            tick.bid_price_1, tick.bid_price_2, tick.bid_price_3, tick.bid_price_4, tick.bid_price_5 = data2[
+                'BidPrice']
+            tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data2[
+                'BidVolume']
+            tick.ask_price_1, tick.ask_price_2, tick.ask_price_3, tick.ask_price_4, tick.ask_price_5 = data2[
+                'AskPrice']
+            tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data2[
+                'AskVolume']
+            self.ticks[code] = tick
+            self.on_tick(copy(tick))
+        return None
+
+    def tick_snapshot_TFE(self, contract):
+        url = "https://service.sinotrade.com.tw/api/v1/Quotes/get500200"
+        payload = {"code": contract.code}
+        r = requests.post(url, json=payload)
+        rtn = json.loads(r.text)
+        if rtn.get('success', None):
+            data = rtn['result']
+            code = contract.code
+            tick = self.ticks.get(code, None)
+            if tick is None:
+                contract = self.code2contract.get(code, None)
+                tick = TickData(
+                    symbol=code,
+                    exchange=Exchange.TFE,
+                    name=f"{contract['name']}{contract['delivery_month']}",
+                    datetime=datetime.now(),
+                    gateway_name=self.gateway_name,
+                )
+
+            tick.volume = int(data["TradingVolume"])
+            tick.last_price = data["CurrentPrice"]
+            tick.limit_up = data["UpLimitPrice"]
+            tick.open_interest = data["UnsettledVolume"]
+            tick.limit_down = data["DownLimitPrice"]
+            tick.open_price = data["OpenPrice"]
+            tick.high_price = data["HighPrice"]
+            tick.low_price = data["LowPrice"]
+            tick.pre_close = data["CurrentPrice"] - data["UpDown"]
+            self.ticks[code] = tick
+            self.on_tick(copy(tick))
+
+        return None
+
+    def getContractSnapshot(self, contract):
+        if contract.exchange == "TSE":
+            self.tick_snapshot_TSE(contract)
+        elif contract.exchange == "TAIFEX":
+            self.tick_snapshot_TFE(contract)
+
     def subscribe(self, req: SubscribeRequest):
         """"""
         if req.symbol in self.subscribed:
@@ -264,6 +350,7 @@ class SinopacGateway(BaseGateway):
 
         contract = self.code2contract.get(req.symbol, None)
         if contract:
+            self.getContractSnapshot(contract)
             self.api.quote.subscribe(contract)
             self.api.quote.subscribe(contract, quote_type='bidask')
             self.write_log('訂閱 {} {} {}'.format(

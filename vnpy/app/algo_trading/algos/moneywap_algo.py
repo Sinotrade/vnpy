@@ -96,7 +96,7 @@ class MoneywapAlgo(AlgoTemplate):
         if not tick:
             return
 
-        #self.cancel_all()
+        # self.cancel_all()
 
         left_volume = self.volume - self.traded
         order_volume = min(self.order_volume, left_volume)
