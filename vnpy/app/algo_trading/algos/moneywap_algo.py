@@ -53,10 +53,8 @@ class MoneywapAlgo(AlgoTemplate):
         # Variables
         tick = self.get_tick(self.vt_symbol)
         if tick and self.direction == Direction.LONG:
-            # self.price = tick.ask_price_1
             self.price = tick.limit_up
         if tick and self.direction == Direction.SHORT:
-            # self.price = tick.bid_price_1
             self.price = tick.limit_down
 
         self.volume = self.total_amt // 1000 // tick.pre_close  # 總數量
@@ -65,7 +63,8 @@ class MoneywapAlgo(AlgoTemplate):
         self.timer_count = 0
         self.total_count = 0
         self.traded = 0
-
+        print(
+            f'{self.vt_symbol} {self.direction},{self.total_amt},{tick.pre_close} 每{self.interval}秒，共{self.volume}')
         self.subscribe(self.vt_symbol)
         self.put_parameters_event()
         self.put_variables_event()
@@ -86,15 +85,16 @@ class MoneywapAlgo(AlgoTemplate):
         self.total_count += 1
         self.put_variables_event()
 
-        if self.total_count >= self.time:
+        # if self.total_count >= self.time:
+        if self.display_volume >= self.volume:
             self.write_log("执行时间已结束，停止算法")
             self.stop()
             return
 
         if self.timer_count < self.interval:
             return
-        self.timer_count = 0
 
+        self.timer_count = 0
         tick = self.get_tick(self.vt_symbol)
         if not tick:
             return
@@ -106,7 +106,6 @@ class MoneywapAlgo(AlgoTemplate):
 
         if self.direction == Direction.LONG:
             if tick.ask_price_1 <= self.price:
-                #self.write_log(f"買進 {self.price},{order_volume}")
                 self.buy(self.vt_symbol, self.price,
                          order_volume, offset=self.offset)
                 self.display_volume += 1
@@ -114,7 +113,6 @@ class MoneywapAlgo(AlgoTemplate):
                 self.price = tick.ask_price_5
         else:
             if tick.bid_price_1 >= self.price:
-                #self.write_log(f"賣出 {self.price},{order_volume}")
                 self.sell(self.vt_symbol, self.price,
                           order_volume, offset=self.offset)
                 self.display_volume += 1
