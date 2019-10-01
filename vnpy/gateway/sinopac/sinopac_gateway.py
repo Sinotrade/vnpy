@@ -284,14 +284,14 @@ class SinopacGateway(BaseGateway):
                     gateway_name=self.gateway_name,
                 )
             tick.volume = data["Volume"]
-            tick.last_price = data["Close"]
+            tick.last_price = data["CurPrice"]
             tick.limit_up = data["UpLimit"]
             tick.open_interest = 0
             tick.limit_down = data["DownLimit"]
             tick.open_price = data["Open"]
             tick.high_price = data["High"]
             tick.low_price = data["Low"]
-            tick.pre_close = data2["Reference"]
+            tick.pre_close = data["Close"]
             tick.bid_price_1, tick.bid_price_2, tick.bid_price_3, tick.bid_price_4, tick.bid_price_5 = data2[
                 'BidPrice']
             tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data2[

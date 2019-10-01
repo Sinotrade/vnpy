@@ -29,7 +29,8 @@ class MoneywapAlgo(AlgoTemplate):
         "total_count",
         "total_amt",
         "interval",
-        "volume"
+        "volume",
+        "display_volume"
     ]
 
     def __init__(
@@ -48,15 +49,17 @@ class MoneywapAlgo(AlgoTemplate):
         self.price = setting["price"]
         self.time = setting["time"]
         self.offset = Offset(setting["offset"])
-
+        self.display_volume = 0
         # Variables
         tick = self.get_tick(self.vt_symbol)
         if tick and self.direction == Direction.LONG:
-            self.price = tick.ask_price_1
+            # self.price = tick.ask_price_1
+            self.price = tick.limit_up
         if tick and self.direction == Direction.SHORT:
-            self.price = tick.bid_price_1
+            # self.price = tick.bid_price_1
+            self.price = tick.limit_down
 
-        self.volume = self.total_amt // 1000 // self.price  # 總數量
+        self.volume = self.total_amt // 1000 // tick.pre_close  # 總數量
         self.interval = self.time // self.volume
         self.order_volume = 1
         self.timer_count = 0
@@ -101,20 +104,19 @@ class MoneywapAlgo(AlgoTemplate):
         left_volume = self.volume - self.traded
         order_volume = min(self.order_volume, left_volume)
 
-        self.write_log(
-            f"價格 {self.price},{tick.bid_price_1},{tick.ask_price_1}")
         if self.direction == Direction.LONG:
             if tick.ask_price_1 <= self.price:
-                self.write_log(f"買進 {self.price},{order_volume}")
+                #self.write_log(f"買進 {self.price},{order_volume}")
                 self.buy(self.vt_symbol, self.price,
                          order_volume, offset=self.offset)
+                self.display_volume += 1
             else:
-
                 self.price = tick.ask_price_5
         else:
             if tick.bid_price_1 >= self.price:
-                self.write_log(f"賣出 {self.price},{order_volume}")
+                #self.write_log(f"賣出 {self.price},{order_volume}")
                 self.sell(self.vt_symbol, self.price,
                           order_volume, offset=self.offset)
+                self.display_volume += 1
             else:
                 self.price = tick.bid_price_5
