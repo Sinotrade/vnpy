@@ -292,14 +292,11 @@ class SinopacGateway(BaseGateway):
             tick.high_price = data["High"]
             tick.low_price = data["Low"]
             tick.pre_close = data["Close"]
-            tick.bid_price_1, tick.bid_price_2, tick.bid_price_3, tick.bid_price_4, tick.bid_price_5 = data2[
-                'BidPrice']
-            tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data2[
-                'BidVolume']
-            tick.ask_price_1, tick.ask_price_2, tick.ask_price_3, tick.ask_price_4, tick.ask_price_5 = data2[
-                'AskPrice']
-            tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data2[
-                'AskVolume']
+            if data2['BidPrice'] is not None:
+                tick.bid_price_1, tick.bid_price_2, tick.bid_price_3, tick.bid_price_4, tick.bid_price_5 = data2['BidPrice'] 
+                tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data2['BidVolume']
+                tick.ask_price_1, tick.ask_price_2, tick.ask_price_3, tick.ask_price_4, tick.ask_price_5 = data2['AskPrice']
+                tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data2['AskVolume']
             self.ticks[code] = tick
             self.on_tick(copy(tick))
         return None
