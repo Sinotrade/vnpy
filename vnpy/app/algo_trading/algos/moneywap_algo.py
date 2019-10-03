@@ -15,7 +15,7 @@ class MoneywapAlgo(AlgoTemplate):
         "direction": [Direction.LONG.value, Direction.SHORT.value],
         "total_amt": 0,
         "time_line": "09:00",
-        "price": 0.0,
+        "traded": 0,
         "offset": [
             Offset.NONE.value,
             Offset.CLOSETODAY.value,
@@ -35,7 +35,8 @@ class MoneywapAlgo(AlgoTemplate):
         self.vt_symbol = setting["vt_symbol"]
         self.direction = Direction(setting["direction"])
         self.total_amt = setting["total_amt"]
-        self.price = setting["price"]
+        self.traded = setting["traded"]
+        self.qty = setting["traded"]
         self.time_line = setting["time_line"]
 
         self.offset = Offset(setting["offset"])
@@ -52,7 +53,11 @@ class MoneywapAlgo(AlgoTemplate):
         if tick and self.direction == Direction.SHORT:
             self.price = tick.limit_down
 
-        self.volume = self.total_amt // 1000 // tick.limit_down  # 總數量
+        if self.qty == 0:
+            self.volume = self.total_amt // 1000 // tick.limit_down if tick.limit_down else (
+                tick.last_price * 0.9)  # 總數量
+        else:
+            self.volume = self.traded
         self.time = (self.end_datetime - datetime.now()).seconds
         self.interval = self.time // self.volume
         self.order_volume = 1
@@ -83,12 +88,20 @@ class MoneywapAlgo(AlgoTemplate):
         self.put_variables_event()
 
         # if self.total_count >= self.time:
-        if self.purchased_amount >= self.total_amt:
-            self.write_log(
-                f"金額交易已滿，合計買進{self.display_volume}張，金額{self.purchased_amount}元"
-            )
-            self.stop()
-            return
+        if self.qty == 0:
+            if self.purchased_amount >= self.total_amt:
+                self.write_log(
+                    f"金額交易已滿，合計交易{self.display_volume}張，金額{self.purchased_amount}元"
+                )
+                self.stop()
+                return
+        else:
+            if self.display_volume >= self.qty:
+                self.write_log(
+                    f"交易數量已滿，合計交易{self.display_volume}張，金額{self.purchased_amount}元"
+                )
+                self.stop()
+                return
 
         if self.timer_count < self.interval:
             return
