@@ -407,7 +407,7 @@ class SinopacGateway(BaseGateway):
             pos = PositionData(
                 symbol=f"{item['stock']} {item['stocknm']}",
                 exchange=EXCHANGE_SINOPAC2VT.get('TSE', Exchange.TSE),
-                direction=Direction.LONG if yd_qty >= 0 else Direction.SHORT,
+                direction=Direction.LONG if volume >= 0 else Direction.SHORT,
                 volume=volume,
                 frozen=total_qty - yd_qty,
                 price=float(item['avgprice']),

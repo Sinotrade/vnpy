@@ -52,7 +52,7 @@ class MoneywapAlgo(AlgoTemplate):
         if tick and self.direction == Direction.SHORT:
             self.price = tick.limit_down
 
-        self.volume = self.total_amt // 1000 // tick.last_price  # 總數量
+        self.volume = self.total_amt // 1000 // tick.limit_down  # 總數量
         self.time = (self.end_datetime - datetime.now()).seconds
         self.interval = self.time // self.volume
         self.order_volume = 1
