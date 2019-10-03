@@ -23,5 +23,6 @@ NAME_DISPLAY_MAP = {
     "spread_up": "价差上限",
     "spread_down": "价差下限",
     "max_pos": "最大持仓",
-    "total_amt": "上限金額(元)"
+    "total_amt": "上限金額(元)",
+    "time_line": "交易截止(時:分)"
 }
