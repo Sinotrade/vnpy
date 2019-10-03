@@ -53,6 +53,7 @@ class AlgoEngine(BaseEngine):
         from .algos.arbitrage_algo import ArbitrageAlgo
         from .algos.moneywap_algo import MoneywapAlgo
 
+        self.add_algo_template(MoneywapAlgo)
         self.add_algo_template(TwapAlgo)
         self.add_algo_template(IcebergAlgo)
         self.add_algo_template(SniperAlgo)
@@ -61,7 +62,6 @@ class AlgoEngine(BaseEngine):
         self.add_algo_template(GridAlgo)
         self.add_algo_template(DmaAlgo)
         self.add_algo_template(ArbitrageAlgo)
-        self.add_algo_template(MoneywapAlgo)
 
     def add_algo_template(self, template: AlgoTemplate):
         """"""
@@ -98,7 +98,8 @@ class AlgoEngine(BaseEngine):
 
     def process_timer_event(self, event: Event):
         """"""
-        for algo in self.algos.values():
+        # for algo in self.algos.values():
+        for algo in list(self.algos.values()):
             algo.update_timer()
 
     def process_trade_event(self, event: Event):
