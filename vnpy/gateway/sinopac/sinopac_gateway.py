@@ -1,39 +1,49 @@
 # encoding: UTF-8
 
+import json
 import os
 import sys
-import requests
-import json
 from collections import OrderedDict
 from copy import copy
 from datetime import datetime
 from threading import Thread
 from time import sleep
+
+import requests
 import shioaji as sj
-from shioaji.order import Status as SinopacStatus
 from shioaji import constant
 from shioaji.account import StockAccount, FutureAccount
+from shioaji.order import Status as SinopacStatus
 
-from vnpy.trader.constant import (Direction, Exchange, Product, OptionType,
-                                  Status, Offset)
+from vnpy.trader.constant import (
+    Direction,
+    Exchange,
+    Product,
+    OptionType,
+    Status,
+    Offset,
+)
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.trader.gateway import BaseGateway
-from vnpy.trader.object import (TickData, OrderData, TradeData, ContractData,
-                                PositionData, SubscribeRequest, OrderRequest,
-                                CancelRequest)
+from vnpy.trader.object import (
+    TickData,
+    OrderData,
+    TradeData,
+    ContractData,
+    PositionData,
+    SubscribeRequest,
+    OrderRequest,
+    CancelRequest,
+)
 
-EXCHANGE_VT2SINOPAC = {
-    Exchange.TSE: "TSE",
-    Exchange.TFE: "TFE",
-    Exchange.TFE: "TAIFEX"
-}
+EXCHANGE_VT2SINOPAC = {Exchange.TSE: "TSE", Exchange.TFE: "TFE", Exchange.TFE: "TAIFEX"}
 EXCHANGE_SINOPAC2VT = {v: k for k, v in EXCHANGE_VT2SINOPAC.items()}
 
 STATUS_SINOPAC2VT = {
     SinopacStatus.Cancelled: Status.CANCELLED,
     SinopacStatus.Failed: Status.REJECTED,
     SinopacStatus.Filled: Status.ALLTRADED,
-    SinopacStatus.Filling: Status.PARTTRADED,
+    SinopacStatus.PartFilled: Status.PARTTRADED,
     SinopacStatus.PreSubmitted: Status.SUBMITTING,
     SinopacStatus.Submitted: Status.NOTTRADED,
     SinopacStatus.PendingSubmit: Status.SUBMITTING,
@@ -53,7 +63,7 @@ class SinopacGateway(BaseGateway):
         "憑證密碼": "",
         "環境": ["正式", "模擬"],
         "預設現貨帳號": "0",
-        "預設期貨帳號": "0"
+        "預設期貨帳號": "0",
     }
 
     exchanges = list(EXCHANGE_SINOPAC2VT.values())
@@ -84,18 +94,20 @@ class SinopacGateway(BaseGateway):
         for item in trades:
             self.orders[item.order.seqno] = item
             if item.status.status in [
-                    SinopacStatus.Filling, SinopacStatus.Filled
+                SinopacStatus.Filled
             ]:  # 成交
-                tradeid = item.status.order_id
+                tradeid = item.status.id
                 if tradeid in self.trades:
                     continue
                 self.trades.add(tradeid)
                 trade = TradeData(
-                    symbol=f'{item.contract.code} {item.contract.name}',
-                    exchange=EXCHANGE_SINOPAC2VT.get(item.contract.exchange,
-                                                     Exchange.TSE),
+                    symbol=f"{item.contract.code} {item.contract.name}",
+                    exchange=EXCHANGE_SINOPAC2VT.get(
+                        item.contract.exchange, Exchange.TSE
+                    ),
                     direction=Direction.LONG
-                    if item.order.action == "Buy" else Direction.SHORT,
+                    if item.order.action == "Buy"
+                    else Direction.SHORT,
                     tradeid=tradeid,
                     orderid=item.order.seqno,
                     price=float(item.order.price),
@@ -106,14 +118,16 @@ class SinopacGateway(BaseGateway):
                 self.on_trade(trade)
             else:
                 order = OrderData(
-                    symbol=f'{item.contract.code} {item.contract.name}',
-                    exchange=EXCHANGE_SINOPAC2VT.get(item.contract.exchange,
-                                                     Exchange.TSE),
+                    symbol=f"{item.contract.code} {item.contract.name}",
+                    exchange=EXCHANGE_SINOPAC2VT.get(
+                        item.contract.exchange, Exchange.TSE
+                    ),
                     orderid=item.order.seqno,
                     direction=Direction.LONG
-                    if item.order.action == "Buy" else Direction.SHORT,
+                    if item.order.action == "Buy"
+                    else Direction.SHORT,
                     price=float(item.order.price),
-                    volume=float(item.status.remaining),
+                    volume=float(item.order.quantity - (item.status.deal_quantity + item.status.cancel_quantity)),
                     traded=float(item.status.deal_quantity),
                     status=STATUS_SINOPAC2VT[item.status.status],
                     time=item.status.order_datetime,
@@ -135,41 +149,38 @@ class SinopacGateway(BaseGateway):
 
     def connect(self, setting: dict):
 
-        userid = setting['身份證字號']
-        password = setting['密碼']
+        userid = setting["身份證字號"]
+        password = setting["密碼"]
         try:
             self.api.login(userid, password)
         except Exception as exc:
             self.write_log(f"登入失败. [{exc}]")
             return
         self.write_log(f"登入成功. [{userid}]")
-        self.select_default_account(setting.get('預設現貨帳號', 0),
-                                    setting.get('預設期貨帳號', 0))
+        self.select_default_account(setting.get("預設現貨帳號", 0), setting.get("預設期貨帳號", 0))
         self.query_contract()
         self.write_log("合约查询成功")
         self.query_position()
         self.write_log("庫存部位查詢")
-        if setting['憑證檔案路徑'] != "":
-            self.api.activate_ca(setting['憑證檔案路徑'], setting['憑證密碼'],
-                                 setting['身份證字號'])
+        if setting["憑證檔案路徑"] != "":
+            self.api.activate_ca(setting["憑證檔案路徑"], setting["憑證密碼"], setting["身份證字號"])
             self.write_log(f"{setting['身份證字號']} 憑證 已啟用.")
         self.api.quote.set_callback(self.quote_callback)
         self.write_log("交易行情 - 連線成功")
         self.thread.start()
 
-    def select_default_account(self, select_stock_number,
-                               select_futures_number):
+    def select_default_account(self, select_stock_number, select_futures_number):
         stock_account_count = 0
         futures_account_count = 0
         for acc in self.api.list_accounts():
             if isinstance(acc, StockAccount):
                 self.write_log(
-                    f'股票帳號: [{stock_account_count}] - {acc.broker_id}-{acc.account_id} {acc.username}'
+                    f"股票帳號: [{stock_account_count}] - {acc.broker_id}-{acc.account_id} {acc.username}"
                 )
                 stock_account_count += 1
             if isinstance(acc, FutureAccount):
                 self.write_log(
-                    f'期貨帳號: [{futures_account_count}] - {acc.broker_id}-{acc.account_id} {acc.username}'
+                    f"期貨帳號: [{futures_account_count}] - {acc.broker_id}-{acc.account_id} {acc.username}"
                 )
                 futures_account_count += 1
 
@@ -203,23 +214,24 @@ class SinopacGateway(BaseGateway):
     def query_contract(self):
         for category in self.api.Contracts.Futures:
             for contract in category:
-                data = ContractData(symbol=f'{contract.code}',
-                                    exchange=Exchange.TFE,
-                                    name=contract.name +
-                                    contract.delivery_month,
-                                    product=Product.FUTURES,
-                                    size=200,
-                                    pricetick=contract.unit,
-                                    net_position=True,
-                                    min_volume=1,
-                                    gateway_name=self.gateway_name)
+                data = ContractData(
+                    symbol=f"{contract.code}",
+                    exchange=Exchange.TFE,
+                    name=contract.name + contract.delivery_month,
+                    product=Product.FUTURES,
+                    size=200,
+                    pricetick=contract.unit,
+                    net_position=True,
+                    min_volume=1,
+                    gateway_name=self.gateway_name,
+                )
                 self.on_contract(data)
                 self.code2contract[contract.code] = contract
 
         for category in self.api.Contracts.Options:
             for contract in category:
                 data = ContractData(
-                    symbol=f'{contract.code} {contract.name}',
+                    symbol=f"{contract.code} {contract.name}",
                     exchange=Exchange.TFE,
                     name=contract.name + contract.delivery_month,
                     product=Product.OPTION,
@@ -231,22 +243,26 @@ class SinopacGateway(BaseGateway):
                     option_strike=contract.strike_price,
                     option_underlying=contract.underlying_code,
                     option_type=OptionType.CALL
-                    if contract.option_right == "C" else OptionType.PUT,
-                    option_expiry=None)
+                    if contract.option_right == "C"
+                    else OptionType.PUT,
+                    option_expiry=None,
+                )
                 self.on_contract(data)
                 self.code2contract[contract.code] = contract
 
         for category in self.api.Contracts.Stocks:
             for contract in category:
-                data = ContractData(symbol=f'{contract.code}',
-                                    exchange=Exchange.TSE,
-                                    name=contract.name,
-                                    product=Product.EQUITY,
-                                    size=1,
-                                    net_position=False,
-                                    pricetick=contract.unit,
-                                    min_volume=1,
-                                    gateway_name=self.gateway_name)
+                data = ContractData(
+                    symbol=f"{contract.code}",
+                    exchange=Exchange.TSE,
+                    name=contract.name,
+                    product=Product.EQUITY,
+                    size=1,
+                    net_position=False,
+                    pricetick=contract.unit,
+                    min_volume=1,
+                    gateway_name=self.gateway_name,
+                )
                 self.on_contract(data)
                 self.code2contract[contract.code] = contract
 
@@ -260,10 +276,10 @@ class SinopacGateway(BaseGateway):
         r2 = requests.post(url2, json=payload2)
         rtn2 = json.loads(r2.text)
 
-        if rtn.get('success', None):
+        if rtn.get("success", None):
             code = contract.code
-            data = rtn['result']
-            data2 = rtn2['result'][code]
+            data = rtn["result"]
+            data2 = rtn2["result"][code]
             tick = self.ticks.get(code, None)
             if tick is None:
                 contract = self.code2contract[code]
@@ -283,15 +299,35 @@ class SinopacGateway(BaseGateway):
             tick.high_price = data["High"]
             tick.low_price = data["Low"]
             tick.pre_close = data["Close"]
-            if data2['BidPrice'] is not None:
-                tick.bid_price_1, tick.bid_price_2, tick.bid_price_3, tick.bid_price_4, tick.bid_price_5 = data2[
-                    'BidPrice']
-                tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data2[
-                    'BidVolume']
-                tick.ask_price_1, tick.ask_price_2, tick.ask_price_3, tick.ask_price_4, tick.ask_price_5 = data2[
-                    'AskPrice']
-                tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data2[
-                    'AskVolume']
+            if data2["BidPrice"] is not None:
+                (
+                    tick.bid_price_1,
+                    tick.bid_price_2,
+                    tick.bid_price_3,
+                    tick.bid_price_4,
+                    tick.bid_price_5,
+                ) = data2["BidPrice"]
+                (
+                    tick.bid_volume_1,
+                    tick.bid_volume_2,
+                    tick.bid_volume_3,
+                    tick.bid_volume_4,
+                    tick.bid_volume_5,
+                ) = data2["BidVolume"]
+                (
+                    tick.ask_price_1,
+                    tick.ask_price_2,
+                    tick.ask_price_3,
+                    tick.ask_price_4,
+                    tick.ask_price_5,
+                ) = data2["AskPrice"]
+                (
+                    tick.ask_volume_1,
+                    tick.ask_volume_2,
+                    tick.ask_volume_3,
+                    tick.ask_volume_4,
+                    tick.ask_volume_5,
+                ) = data2["AskVolume"]
             self.ticks[code] = tick
             self.on_tick(copy(tick))
         return None
@@ -301,8 +337,8 @@ class SinopacGateway(BaseGateway):
         payload = {"code": contract.code}
         r = requests.post(url, json=payload)
         rtn = json.loads(r.text)
-        if rtn.get('success', None):
-            data = rtn['result']
+        if rtn.get("success", None):
+            data = rtn["result"]
             code = contract.code
             tick = self.ticks.get(code, None)
             if tick is None:
@@ -343,10 +379,11 @@ class SinopacGateway(BaseGateway):
         contract = self.code2contract.get(req.symbol, None)
         if contract:
             self.getContractSnapshot(contract)
-            self.api.quote.subscribe(contract)
-            self.api.quote.subscribe(contract, quote_type='bidask')
-            self.write_log('訂閱 {} {} {}'.format(req.exchange.value,
-                                                contract.code, contract.name))
+            self.api.quote.subscribe(contract, quote_type="tick")
+            self.api.quote.subscribe(contract, quote_type="bidask")
+            self.write_log(
+                "訂閱 {} {} {}".format(req.exchange.value, contract.code, contract.name)
+            )
             self.subscribed.add(req.symbol)
         else:
             self.write_log("無此訂閱商品[{}].".format(str(req)))
@@ -356,34 +393,52 @@ class SinopacGateway(BaseGateway):
         self.write_log("***send_order")
         self.write_log(str(req))
         if req.exchange == Exchange.TFE:
-            action = constant.ACTION_BUY if req.direction == Direction.LONG else constant.ACTION_SELL
+            action = (
+                constant.ACTION_BUY
+                if req.direction == Direction.LONG
+                else constant.ACTION_SELL
+            )
             price_type = constant.FUTURES_PRICE_TYPE_LMT
             order_type = constant.FUTURES_ORDER_TYPE_ROD
-            order = self.api.Order(req.price,
-                                   req.volume,
-                                   action=action,
-                                   price_type=price_type,
-                                   order_type=order_type)
+            order = self.api.Order(
+                req.price,
+                req.volume,
+                action=action,
+                price_type=price_type,
+                order_type=order_type,
+            )
 
         elif req.exchange == Exchange.TSE:
-            action = constant.ACTION_BUY if req.direction == Direction.LONG else constant.ACTION_SELL
+            action = (
+                constant.ACTION_BUY
+                if req.direction == Direction.LONG
+                else constant.ACTION_SELL
+            )
             price_type = constant.STOCK_PRICE_TYPE_LIMITPRICE
             order_type = constant.STOCK_ORDER_TYPE_COMMON
-            first_sell = constant.STOCK_FIRST_SELL_YES if req.offset == Offset.CLOSETODAY else constant.STOCK_FIRST_SELL_NO
-            order = self.api.Order(price=req.price,
-                                   quantity=int(req.volume),
-                                   action=action,
-                                   price_type=price_type,
-                                   order_type=order_type,
-                                   first_sell=first_sell)
-
-        trade = self.api.place_order(self.code2contract[req.symbol], order)
-        self.write_log(str(trade))
+            first_sell = (
+                constant.STOCK_FIRST_SELL_YES
+                if req.offset == Offset.CLOSETODAY
+                else constant.STOCK_FIRST_SELL_NO
+            )
+            order = self.api.Order(
+                price=req.price,
+                quantity=int(req.volume),
+                action=action,
+                price_type=price_type,
+                order_type=order_type,
+                first_sell=first_sell,
+            )
+        trade = self.api.place_order(self.code2contract[req.symbol], order, 0, self.cb_placeorder)
+        #self.write_log(str(trade))
         orderdata = req.create_order_data(order.seqno, self.gateway_name)
         self.write_log(str(orderdata))
         self.orders[orderdata.orderid] = trade
         self.on_order(orderdata)
         return orderdata.vt_orderid
+
+    def cb_placeorder(self, trade: sj.order.Trade):
+        self.write_log("TEST" + str(trade))
 
     def cancel_order(self, req: CancelRequest):
         """"""
@@ -401,23 +456,25 @@ class SinopacGateway(BaseGateway):
         self.api.get_stock_account_unreal_profitloss().update()
         data = self.api.get_stock_account_unreal_profitloss().data()["summary"]
         for item in data:
-            volume = float(item['real_qty']) / 1000
-            total_qty = float(item['real_qty']) / 1000
-            yd_qty = float(item['qty']) / 1000
+            volume = float(item["real_qty"]) / 1000
+            total_qty = float(item["real_qty"]) / 1000
+            yd_qty = float(item["qty"]) / 1000
             pos = PositionData(
                 symbol=f"{item['stock']} {item['stocknm']}",
-                exchange=EXCHANGE_SINOPAC2VT.get('TSE', Exchange.TSE),
+                exchange=EXCHANGE_SINOPAC2VT.get("TSE", Exchange.TSE),
                 direction=Direction.LONG if volume >= 0 else Direction.SHORT,
                 volume=volume,
                 frozen=total_qty - yd_qty,
-                price=float(item['avgprice']),
-                pnl=float(item['unreal']),
+                price=float(item["avgprice"]),
+                pnl=float(item["unreal"]),
                 yd_volume=yd_qty,
-                gateway_name=self.gateway_name)
+                gateway_name=self.gateway_name,
+            )
             self.on_position(pos)
 
     def close(self):
         """"""
+
     def quote_callback(self, topic, data):
         """
         # L/TFE/TXFF9
@@ -441,7 +498,7 @@ class SinopacGateway(BaseGateway):
          'Date': '2019/05/17', 'Time': '09:53:00.706928'}
         """
         try:
-            topics = topic.split('/')
+            topics = topic.split("/")
             realtime_type = topics[0]
             tick = None
             if realtime_type == "L":
@@ -458,19 +515,20 @@ class SinopacGateway(BaseGateway):
         except Exception as e:
             exc_type, _, exc_tb = sys.exc_info()
             filename = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            self.write_log('[{}][{}][{}][{}]'.format(exc_type, filename,
-                                                     exc_tb.tb_lineno, str(e)))
+            self.write_log(
+                "[{}][{}][{}][{}]".format(exc_type, filename, exc_tb.tb_lineno, str(e))
+            )
             self.write_log(data)
 
     def quote_futures_Q(self, data):
-        code = data.get('Code', None)
+        code = data.get("Code", None)
         if code is None:
             return
         tick = self.ticks.get(code, None)
         if tick is None:
             contract = self.code2contract[code]
             tick = TickData(
-                symbol=data['Code'],
+                symbol=data["Code"],
                 exchange=Exchange.TFE,
                 name=f"{contract['name']}{contract['delivery_month']}",
                 datetime=datetime.now(),
@@ -500,7 +558,7 @@ class SinopacGateway(BaseGateway):
         return tick
 
     def qutote_futures_L(self, data):
-        code = data.get('Code', None)
+        code = data.get("Code", None)
         if code is None:
             return
         tick = self.ticks.get(code, None)
@@ -515,7 +573,8 @@ class SinopacGateway(BaseGateway):
             )
             self.ticks[code] = tick
         tick.datetime = datetime.strptime(
-            '{} {}'.format(data['Date'], data['Time']), "%Y/%m/%d %H:%M:%S.%f")
+            "{} {}".format(data["Date"], data["Time"]), "%Y/%m/%d %H:%M:%S.%f"
+        )
         tick.volume = int(data["VolSum"][0])
         tick.last_price = data["Close"][0]
         tick.limit_up = 0
@@ -548,22 +607,25 @@ class SinopacGateway(BaseGateway):
                 name=f"{contract['name']}{contract['delivery_month']}",
                 datetime=datetime.now(),
                 gateway_name=self.gateway_name,
-                low_price=99999)
+                low_price=99999,
+            )
             self.ticks[code] = tick
         tick.datetime = datetime.combine(
             datetime.today(),
-            datetime.strptime('{}'.format(data['Time']), "%H:%M:%S.%f").time())
+            datetime.strptime("{}".format(data["Time"]), "%H:%M:%S.%f").time(),
+        )
         tick.volume = int(data["VolSum"][0])
         tick.last_price = data["Close"][0]
         tick.limit_up = 0
         tick.open_interest = 0
         tick.limit_down = 0
-        tick.open_price = data["Close"][
-            0] if tick.open_price == 0 else tick.open_price
-        tick.high_price = data["Close"][
-            0] if data["Close"][0] > tick.high_price else tick.high_price
-        tick.low_price = data["Close"][
-            0] if data["Close"][0] < tick.low_price else tick.low_price
+        tick.open_price = data["Close"][0] if tick.open_price == 0 else tick.open_price
+        tick.high_price = (
+            data["Close"][0] if data["Close"][0] > tick.high_price else tick.high_price
+        )
+        tick.low_price = (
+            data["Close"][0] if data["Close"][0] < tick.low_price else tick.low_price
+        )
         tick.pre_close = tick.open_price
         return tick
 
