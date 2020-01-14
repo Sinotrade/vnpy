@@ -87,10 +87,10 @@ class SinopacGateway(BaseGateway):
         self.thread = Thread(target=self.query_data)
         self.query_funcs = [self.query_position, self.query_trade]
         self.api = sj.Shioaji()
-
-    def query_trade(self):
-        self.api.update_status()
-        trades = self.api.list_trades()
+    
+    def proc_trade(self, trades):
+        self.write_log("cb_update_status")
+        # trades = self.api.list_trades()
         for item in trades:
             self.orders[item.order.seqno] = item
             if item.status.status in [
@@ -117,6 +117,7 @@ class SinopacGateway(BaseGateway):
                 )
                 self.on_trade(trade)
             else:
+                self.write_log(str(item))
                 order = OrderData(
                     symbol=f"{item.contract.code} {item.contract.name}",
                     exchange=EXCHANGE_SINOPAC2VT.get(
@@ -135,6 +136,10 @@ class SinopacGateway(BaseGateway):
                 )
                 self.on_order(order)
 
+
+    def query_trade(self):
+        self.api.update_status(timeout=0,cb=self.proc_trade)
+
     def query_data(self):
         """
         Query all data necessary.
@@ -152,14 +157,12 @@ class SinopacGateway(BaseGateway):
         userid = setting["身份證字號"]
         password = setting["密碼"]
         try:
-            self.api.login(userid, password)
+            self.api.login(userid, password,contracts_cb=self.query_contract)
         except Exception as exc:
             self.write_log(f"登入失败. [{exc}]")
             return
         self.write_log(f"登入成功. [{userid}]")
         self.select_default_account(setting.get("預設現貨帳號", 0), setting.get("預設期貨帳號", 0))
-        self.query_contract()
-        self.write_log("合约查询成功")
         self.query_position()
         self.write_log("庫存部位查詢")
         if setting["憑證檔案路徑"] != "":
@@ -211,7 +214,8 @@ class SinopacGateway(BaseGateway):
         func()
         self.query_funcs.append(func)
 
-    def query_contract(self):
+    def query_contract(self, securities_type=None):
+        self.write_log("商品檔"+securities_type)
         for category in self.api.Contracts.Futures:
             for contract in category:
                 data = ContractData(
@@ -430,7 +434,7 @@ class SinopacGateway(BaseGateway):
                 first_sell=first_sell,
             )
         trade = self.api.place_order(self.code2contract[req.symbol], order, 0, self.cb_placeorder)
-        #self.write_log(str(trade))
+        # self.write_log(str(trade))
         orderdata = req.create_order_data(order.seqno, self.gateway_name)
         self.write_log(str(orderdata))
         self.orders[orderdata.orderid] = trade
